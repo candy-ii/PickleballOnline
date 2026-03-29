@@ -1,0 +1,14 @@
+Frontend:
+
+Typescript + React + TailwindCSS
+
+Backend: Typescript + Express.js
+
+DB: PostgreSQL + Prisma
+
+Payment: SSLCommerz
+
+Notifications: Simple pollinh
+
+Auth: JS
+
