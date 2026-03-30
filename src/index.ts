@@ -60,6 +60,66 @@ app.get('/api/leaderboard', async (req, res) => {
   }
 });
 
+app.get('/api/tournaments', async (req, res) => {
+  try {
+    const { rows } = await pool.query<{
+      tournament_id: number;
+      title: string;
+      date: Date | string;
+      skill_cap: number | null;
+      status: string | null;
+      organizer_fee: string | number | null;
+      organizer_name: string | null;
+    }>(`
+      SELECT
+        t.tournament_id,
+        t.title,
+        t.date,
+        t.skill_cap,
+        t.status,
+        t.organizer_fee,
+        o.name AS organizer_name
+      FROM public.tournament t
+      LEFT JOIN public.organizer_details o ON o.org_id = t.org_id
+      WHERE t.date >= NOW()
+    `);
+
+    const tournaments = rows.map((row) => {
+      return {
+        tournamentId: row.tournament_id,
+        title: row.title,
+        date: new Date(row.date),
+        skillCap: row.skill_cap ?? 0,
+        organizerFee: Number(row.organizer_fee ?? 0),
+        organizer: row.organizer_name ?? 'Unknown Organizer',
+        spotsLeft: Math.max(Number(row.status ?? 0), 0),
+      };
+    });
+
+    const startingSoon = [...tournaments]
+      .sort((a, b) => a.date.getTime() - b.date.getTime())
+      .slice(0, 5);
+
+    const futureByOrganizerFee = [...tournaments]
+      .sort((a, b) => {
+        if (b.organizerFee !== a.organizerFee) {
+          return b.organizerFee - a.organizerFee;
+        }
+
+        return a.date.getTime() - b.date.getTime();
+      })
+      .slice(0, 5);
+
+    res.json({
+      startingSoon,
+      futureTournaments: futureByOrganizerFee,
+    });
+  } catch (error) {
+    console.error('Failed to load tournaments:', error);
+    res.status(500).json({ error: 'Failed to load tournaments' });
+  }
+});
+
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });

@@ -1,4 +1,4 @@
-import { useEffect, useState, type FC } from 'react'
+import { useEffect, useState, type FC, type WheelEvent } from 'react'
 
 // ── Icons ────────────────────────────────────────────────────────────────────
 
@@ -19,6 +19,12 @@ const BellIcon: FC<{ className?: string }> = ({ className }) => (
 const FilterIcon: FC<{ className?: string }> = ({ className }) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
     <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+  </svg>
+)
+
+const ArrowIcon: FC<{ className?: string; direction: 'left' | 'right' }> = ({ className, direction }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+    {direction === 'left' ? <path d="m15 18-6-6 6-6" /> : <path d="m9 18 6-6-6-6" />}
   </svg>
 )
 
@@ -54,6 +60,7 @@ interface Tournament {
   organizer: string
   canJoin: boolean
   imageBg: string
+  kind?: 'tournament' | 'message'
 }
 
 interface LeaderboardPlayer {
@@ -65,20 +72,31 @@ interface LeaderboardPlayer {
   winRate: number
 }
 
-const startingSoon: Tournament[] = [
-  { id: 1, name: 'Tournament Alpha', spotsLeft: 3, startLabel: 'IN 2 DAYS',   organizer: 'Team Pro',         canJoin: true,  imageBg: '3a6b35' },
-  { id: 2, name: 'Tourney Beta',     spotsLeft: 1, startLabel: 'TODAY',        organizer: 'Local Pball Club', canJoin: true,  imageBg: '2d5a27' },
-  { id: 3, name: 'Tourney Gamma',    spotsLeft: 1, startLabel: 'TOMORROW',     organizer: 'Apex Sports',      canJoin: true,  imageBg: '4a7a40' },
-]
-
-const futureTournaments: Tournament[] = [
-  { id: 4, name: 'Tournament Delta',   spotsLeft: 0, startLabel: 'IN 5 DAYS',  organizer: 'Team Pro',    canJoin: false, imageBg: '2a4a25' },
-  { id: 5, name: 'Tourney Epsilon',    spotsLeft: 0, startLabel: 'IN 1 MONTH', organizer: 'Pbam Pro',    canJoin: false, imageBg: '1e3a1a' },
-  { id: 6, name: 'Tournament Zeta',    spotsLeft: 5, startLabel: 'IN 1 WEEK',  organizer: 'City League', canJoin: true,  imageBg: '3d6b38' },
-]
+interface TournamentsResponse {
+  startingSoon: Array<{
+    tournamentId: number
+    title: string
+    organizer: string
+    spotsLeft: number
+    organizerFee: number
+    skillCap: number
+    date: string
+  }>
+  futureTournaments: Array<{
+    tournamentId: number
+    title: string
+    organizer: string
+    spotsLeft: number
+    organizerFee: number
+    skillCap: number
+    date: string
+  }>
+}
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001'
 const avatarPalette = ['5a8a5a', '4a7a6a', '6a9a7a', '3a6a5a', '4a6a4a', '6a8f54']
+const tournamentPalette = ['3a6b35', '2d5a27', '4a7a40', '2a4a25', '1e3a1a', '3d6b38']
+const visibleTournamentCards = 3
 
 const getOrdinal = (position: number) => {
   const mod100 = position % 100
@@ -97,47 +115,144 @@ const getOrdinal = (position: number) => {
 }
 
 const getAvatarBg = (playerId: number) => avatarPalette[playerId % avatarPalette.length]
+const getTournamentBg = (id: number) => tournamentPalette[id % tournamentPalette.length]
+
+const formatStartLabel = (dateString: string) => {
+  const today = new Date()
+  const target = new Date(dateString)
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  const targetStart = new Date(target.getFullYear(), target.getMonth(), target.getDate())
+  const diffDays = Math.round((targetStart.getTime() - todayStart.getTime()) / 86_400_000)
+
+  if (diffDays <= 0) return 'TODAY'
+  if (diffDays === 1) return 'TOMORROW'
+  if (diffDays < 7) return `IN ${diffDays} DAYS`
+  if (diffDays < 14) return 'IN 1 WEEK'
+  if (diffDays >= 30) {
+    const months = Math.max(1, Math.round(diffDays / 30))
+    return `IN ${months} ${months === 1 ? 'MONTH' : 'MONTHS'}`
+  }
+
+  const weeks = Math.round(diffDays / 7)
+  return `IN ${weeks} WEEKS`
+}
+
+const normalizeTournament = (tournament: TournamentsResponse['startingSoon'][number]): Tournament => ({
+  id: tournament.tournamentId,
+  name: tournament.title,
+  spotsLeft: tournament.spotsLeft,
+  startLabel: formatStartLabel(tournament.date),
+  organizer: tournament.organizer,
+  canJoin: tournament.spotsLeft > 0,
+  imageBg: getTournamentBg(tournament.tournamentId),
+  kind: 'tournament',
+})
+
+const createFilterMessageCard = (): Tournament => ({
+  id: -1,
+  name: "Not finding what you're looking for? Try filtering!",
+  spotsLeft: 0,
+  startLabel: '',
+  organizer: '',
+  canJoin: false,
+  imageBg: 'dfe8dc',
+  kind: 'message',
+})
+
+const TournamentCarousel: FC<{
+  title: string
+  tournaments: Tournament[]
+  offset: number
+  onMoveLeft: () => void
+  onMoveRight: () => void
+  onWheel: (event: WheelEvent<HTMLDivElement>) => void
+  showEndMessage?: boolean
+}> = ({ title, tournaments, offset, onMoveLeft, onMoveRight, onWheel, showEndMessage = false }) => {
+  const items = showEndMessage ? [...tournaments, createFilterMessageCard()] : tournaments
+  const maxOffset = Math.max(items.length - visibleTournamentCards, 0)
+  const visibleCarouselItems = items.slice(offset, offset + visibleTournamentCards)
+
+  return (
+    <section>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h2 className="text-2xl font-bold text-[#1a3a1a]">{title}</h2>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            aria-label={`Scroll ${title} left`}
+            onClick={onMoveLeft}
+            disabled={offset === 0}
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-[#1a3a1a]/18 text-[#1a3a1a] shadow-sm backdrop-blur-sm transition hover:bg-[#1a3a1a]/28 disabled:cursor-not-allowed disabled:opacity-35"
+          >
+            <ArrowIcon direction="left" className="h-5 w-5" />
+          </button>
+          <button
+            type="button"
+            aria-label={`Scroll ${title} right`}
+            onClick={onMoveRight}
+            disabled={offset >= maxOffset + 1}
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-[#1a3a1a]/18 text-[#1a3a1a] shadow-sm backdrop-blur-sm transition hover:bg-[#1a3a1a]/28 disabled:cursor-not-allowed disabled:opacity-35"
+          >
+            <ArrowIcon direction="right" className="h-5 w-5" />
+          </button>
+        </div>
+      </div>
+
+      <div onWheel={onWheel} className="grid grid-cols-3 gap-5">
+        {visibleCarouselItems.map((t) => <TournamentCard key={`${t.kind ?? 'tournament'}-${t.id}`} t={t} />)}
+      </div>
+    </section>
+  )
+}
 
 // ── Tournament Card ───────────────────────────────────────────────────────────
 
 const TournamentCard: FC<{ t: Tournament }> = ({ t }) => (
   <div className="bg-white rounded-2xl shadow-md flex flex-col transition-all duration-200 hover:scale-[1.03] hover:shadow-xl cursor-pointer">
-    <img
-      src={`https://placehold.co/400x160/${t.imageBg}/6aaa60?text=`}
-      alt={t.name}
-      className="w-full h-40 object-cover rounded-t-2xl"
-    />
-    <div className="p-4 flex flex-col gap-2 flex-1">
-      <h3 className="font-bold text-base text-center text-gray-900 leading-tight">{t.name}</h3>
-
-      <div className="flex items-center justify-between text-xs font-semibold gap-2">
-        <span className="flex items-center gap-1 text-green-600 whitespace-nowrap">
-          <PeopleIcon className="w-3.5 h-3.5 shrink-0" />
-          {t.spotsLeft} SPOTS LEFT
-        </span>
-        <span className="flex items-center gap-1 text-gray-700 whitespace-nowrap">
-          <CalendarIcon className="w-3.5 h-3.5 shrink-0" />
-          STARTS {t.startLabel}
-        </span>
+    {t.kind === 'message' ? (
+      <div className="flex flex-1 items-center justify-center p-6 text-center text-lg font-semibold text-[#1a3a1a]">
+          {t.name}
       </div>
+    ) : (
+      <>
+        <img
+          src={`https://placehold.co/400x160/${t.imageBg}/6aaa60?text=`}
+          alt={t.name}
+          className="w-full h-40 object-cover rounded-t-2xl"
+        />
+        <div className="p-4 flex flex-col gap-2 flex-1">
+          <h3 className="font-bold text-base text-center text-gray-900 leading-tight">{t.name}</h3>
 
-      <p className="flex items-center gap-1 text-xs text-gray-500">
-        <PinIcon className="w-3.5 h-3.5 shrink-0" />
-        Organized by {t.organizer}
-      </p>
+          <div className="flex items-center justify-between text-xs font-semibold gap-2">
+            <span className="flex items-center gap-1 text-green-600 whitespace-nowrap">
+              <PeopleIcon className="w-3.5 h-3.5 shrink-0" />
+              {t.spotsLeft} SPOTS LEFT
+            </span>
+            <span className="flex items-center gap-1 text-gray-700 whitespace-nowrap">
+              <CalendarIcon className="w-3.5 h-3.5 shrink-0" />
+              STARTS {t.startLabel}
+            </span>
+          </div>
 
-      <div className="mt-auto pt-2">
-        {t.canJoin ? (
-          <button className="w-full bg-[#1a3a1a] text-white rounded-full py-2 text-sm font-bold hover:bg-[#2d5a27] transition-colors cursor-pointer">
-            Join Now
-          </button>
-        ) : (
-          <button className="w-full bg-[#7a8a6a] text-white rounded-full py-2 text-sm font-bold hover:bg-[#8a9a7a] transition-colors cursor-pointer">
-            WAITLIST
-          </button>
-        )}
-      </div>
-    </div>
+          <p className="flex items-center gap-1 text-xs text-gray-500">
+            <PinIcon className="w-3.5 h-3.5 shrink-0" />
+            Organized by {t.organizer}
+          </p>
+
+          <div className="mt-auto pt-2">
+            {t.canJoin ? (
+              <button className="w-full bg-[#1a3a1a] text-white rounded-full py-2 text-sm font-bold hover:bg-[#2d5a27] transition-colors cursor-pointer">
+                JOIN NOW
+              </button>
+            ) : (
+              <button className="w-full bg-[#7a8a6a] text-white rounded-full py-2 text-sm font-bold hover:bg-[#8a9a7a] transition-colors cursor-pointer">
+                JOIN WAITLIST
+              </button>
+            )}
+          </div>
+        </div>
+      </>
+    )}
   </div>
 )
 
@@ -146,24 +261,42 @@ const TournamentCard: FC<{ t: Tournament }> = ({ t }) => (
 const Dashboard: FC = () => {
   const [leaderboard, setLeaderboard] = useState<LeaderboardPlayer[]>([])
   const [leaderboardError, setLeaderboardError] = useState<string | null>(null)
+  const [startingSoon, setStartingSoon] = useState<Tournament[]>([])
+  const [futureTournaments, setFutureTournaments] = useState<Tournament[]>([])
+  const [tournamentsError, setTournamentsError] = useState<string | null>(null)
+  const [startingSoonOffset, setStartingSoonOffset] = useState(0)
+  const [futureOffset, setFutureOffset] = useState(0)
+
+  const maxStartingSoonOffset = Math.max(startingSoon.length + 1 - visibleTournamentCards, 0)
+  const maxFutureOffset = Math.max(futureTournaments.length - visibleTournamentCards, 0)
 
   useEffect(() => {
     const controller = new AbortController()
 
-    const loadLeaderboard = async () => {
+    const loadDashboardData = async () => {
       try {
         setLeaderboardError(null)
+        setTournamentsError(null)
 
-        const response = await fetch(`${API_BASE_URL}/api/leaderboard`, {
-          signal: controller.signal,
-        })
+        const [leaderboardResponse, tournamentsResponse] = await Promise.all([
+          fetch(`${API_BASE_URL}/api/leaderboard`, { signal: controller.signal }),
+          fetch(`${API_BASE_URL}/api/tournaments`, { signal: controller.signal }),
+        ])
 
-        if (!response.ok) {
-          throw new Error(`Leaderboard request failed with ${response.status}`)
+        if (!leaderboardResponse.ok) {
+          throw new Error(`Leaderboard request failed with ${leaderboardResponse.status}`)
         }
 
-        const data = (await response.json()) as LeaderboardPlayer[]
-        setLeaderboard(data)
+        if (!tournamentsResponse.ok) {
+          throw new Error(`Tournaments request failed with ${tournamentsResponse.status}`)
+        }
+
+        const leaderboardData = (await leaderboardResponse.json()) as LeaderboardPlayer[]
+        const tournamentsData = (await tournamentsResponse.json()) as TournamentsResponse
+
+        setLeaderboard(leaderboardData)
+        setStartingSoon(tournamentsData.startingSoon.map(normalizeTournament))
+        setFutureTournaments(tournamentsData.futureTournaments.map(normalizeTournament))
       } catch (error) {
         if (controller.signal.aborted) {
           return
@@ -171,13 +304,31 @@ const Dashboard: FC = () => {
 
         console.error('Failed to fetch leaderboard:', error)
         setLeaderboardError('Unable to load leaderboard')
+        setTournamentsError('Unable to load tournaments')
       }
     }
 
-    void loadLeaderboard()
+    void loadDashboardData()
 
     return () => controller.abort()
   }, [])
+
+  const moveStartingSoon = (direction: -1 | 1) => {
+    setStartingSoonOffset((current) => Math.min(Math.max(current + direction, 0), maxStartingSoonOffset))
+  }
+
+  const moveFuture = (direction: -1 | 1) => {
+    setFutureOffset((current) => Math.min(Math.max(current + direction, 0), maxFutureOffset))
+  }
+
+  const handleCarouselWheel =
+    (move: (direction: -1 | 1) => void) => (event: WheelEvent<HTMLDivElement>) => {
+      const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY
+      if (delta === 0) return
+
+      event.preventDefault()
+      move(delta > 0 ? 1 : -1)
+    }
 
   return (
   <div className="min-h-screen bg-[#b8cfb8]" style={{ fontFamily: 'system-ui, sans-serif' }}>
@@ -231,20 +382,43 @@ const Dashboard: FC = () => {
         </div>
 
         {/* Starting Soon */}
-        <section>
-          <h2 className="text-2xl font-bold text-[#1a3a1a] mb-4">Starting Soon</h2>
-          <div className="grid grid-cols-3 gap-5">
-            {startingSoon.map(t => <TournamentCard key={t.id} t={t} />)}
-          </div>
-        </section>
+        {startingSoon.length ? (
+          <TournamentCarousel
+            title="Starting Soon"
+            tournaments={startingSoon}
+            offset={startingSoonOffset}
+            onMoveLeft={() => moveStartingSoon(-1)}
+            onMoveRight={() => moveStartingSoon(1)}
+            onWheel={handleCarouselWheel(moveStartingSoon)}
+            showEndMessage
+          />
+        ) : (
+          <section>
+            <h2 className="text-2xl font-bold text-[#1a3a1a] mb-4">Starting Soon</h2>
+            <div className="flex min-h-72 items-center justify-center rounded-2xl bg-white/55 text-[#1a3a1a] shadow-sm">
+              {tournamentsError ?? 'Loading tournaments...'}
+            </div>
+          </section>
+        )}
 
         {/* Future Tournaments */}
-        <section>
-          <h2 className="text-2xl font-bold text-[#1a3a1a] mb-4">Future Tournaments</h2>
-          <div className="grid grid-cols-3 gap-5">
-            {futureTournaments.map(t => <TournamentCard key={t.id} t={t} />)}
-          </div>
-        </section>
+        {futureTournaments.length ? (
+          <TournamentCarousel
+            title="Future Tournaments"
+            tournaments={futureTournaments}
+            offset={futureOffset}
+            onMoveLeft={() => moveFuture(-1)}
+            onMoveRight={() => moveFuture(1)}
+            onWheel={handleCarouselWheel(moveFuture)}
+          />
+        ) : (
+          <section>
+            <h2 className="text-2xl font-bold text-[#1a3a1a] mb-4">Future Tournaments</h2>
+            <div className="flex min-h-72 items-center justify-center rounded-2xl bg-white/55 text-[#1a3a1a] shadow-sm">
+              {tournamentsError ?? 'Loading tournaments...'}
+            </div>
+          </section>
+        )}
       </main>
 
       {/* ── Sidebar ── */}
