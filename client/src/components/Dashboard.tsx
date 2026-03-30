@@ -2,7 +2,7 @@ import { useEffect, useState, type FC, type WheelEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import type { AuthUser } from '../types/auth'
 
-// ── Icons ────────────────────────────────────────────────────────────────────
+//icons
 
 const SearchIcon: FC<{ className?: string }> = ({ className }) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
@@ -52,7 +52,10 @@ const PinIcon: FC<{ className?: string }> = ({ className }) => (
   </svg>
 )
 
-// ── Data ─────────────────────────────────────────────────────────────────────
+
+
+
+//data
 
 interface Tournament {
   id: number
@@ -61,7 +64,7 @@ interface Tournament {
   startLabel: string
   organizer: string
   canJoin: boolean
-  imageBg: string
+  imageUrl: string
   kind?: 'tournament' | 'message'
 }
 
@@ -97,7 +100,14 @@ interface TournamentsResponse {
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001'
 const avatarPalette = ['5a8a5a', '4a7a6a', '6a9a7a', '3a6a5a', '4a6a4a', '6a8f54']
-const tournamentPalette = ['3a6b35', '2d5a27', '4a7a40', '2a4a25', '1e3a1a', '3d6b38']
+const tournamentImages = [
+  'https://images.unsplash.com/photo-1622279457486-62dcc4a431d6?auto=format&fit=crop&w=900&q=80',
+  'https://images.unsplash.com/photo-1517649763962-0c623066013b?auto=format&fit=crop&w=900&q=80',
+  'https://images.unsplash.com/photo-1542144582-1ba00456b5e3?auto=format&fit=crop&w=900&q=80',
+  'https://images.unsplash.com/photo-1459865264687-595d652de67e?auto=format&fit=crop&w=900&q=80',
+  'https://images.unsplash.com/photo-1526232761682-d26e03ac148e?auto=format&fit=crop&w=900&q=80',
+  'https://images.unsplash.com/photo-1554068865-24cecd4e34b8?auto=format&fit=crop&w=900&q=80',
+]
 const visibleTournamentCards = 3
 
 const getOrdinal = (position: number) => {
@@ -117,7 +127,7 @@ const getOrdinal = (position: number) => {
 }
 
 const getAvatarBg = (playerId: number) => avatarPalette[playerId % avatarPalette.length]
-const getTournamentBg = (id: number) => tournamentPalette[id % tournamentPalette.length]
+const getTournamentImage = (id: number) => tournamentImages[id % tournamentImages.length]
 
 const formatStartLabel = (dateString: string) => {
   const today = new Date()
@@ -146,7 +156,7 @@ const normalizeTournament = (tournament: TournamentsResponse['startingSoon'][num
   startLabel: formatStartLabel(tournament.date),
   organizer: tournament.organizer,
   canJoin: tournament.spotsLeft > 0,
-  imageBg: getTournamentBg(tournament.tournamentId),
+  imageUrl: getTournamentImage(tournament.tournamentId),
   kind: 'tournament',
 })
 
@@ -172,7 +182,7 @@ const createFilterMessageCard = (): Tournament => ({
   startLabel: '',
   organizer: '',
   canJoin: false,
-  imageBg: 'dfe8dc',
+  imageUrl: '',
   kind: 'message',
 })
 
@@ -225,7 +235,10 @@ const TournamentCarousel: FC<{
   )
 }
 
-// ── Tournament Card ───────────────────────────────────────────────────────────
+
+
+
+//tournament card
 
 const TournamentCard: FC<{ t: Tournament; requiresLogin?: boolean }> = ({ t, requiresLogin = false }) => {
   const navigate = useNavigate()
@@ -245,7 +258,7 @@ const TournamentCard: FC<{ t: Tournament; requiresLogin?: boolean }> = ({ t, req
     ) : (
       <>
         <img
-          src={`https://placehold.co/400x160/${t.imageBg}/6aaa60?text=`}
+          src={t.imageUrl}
           alt={t.name}
           className="w-full h-40 object-cover rounded-t-2xl"
         />
@@ -294,7 +307,10 @@ const TournamentCard: FC<{ t: Tournament; requiresLogin?: boolean }> = ({ t, req
 )
 }
 
-// ── Dashboard ─────────────────────────────────────────────────────────────────
+
+
+
+//dashboard
 
 interface DashboardProps {
   currentUser: AuthUser | null
@@ -410,9 +426,9 @@ const Dashboard: FC<DashboardProps> = ({ currentUser, onLogout }) => {
   return (
   <div className="min-h-screen bg-[#b8cfb8]" style={{ fontFamily: 'system-ui, sans-serif' }}>
 
-    {/* ── Header ── */}
+    {/*header*/}
     <header className="bg-white shadow-sm px-8 py-3 flex items-center justify-between">
-      {/* Logo */}
+      {/*logo*/}
       <div className="flex items-center gap-3">
         <img
           src="https://placehold.co/44x44/2d5a27/ffffff?text=P"
@@ -422,7 +438,7 @@ const Dashboard: FC<DashboardProps> = ({ currentUser, onLogout }) => {
         <span className="text-2xl font-bold text-[#1a3a1a]">Pickleball Online</span>
       </div>
 
-      {/* Bell + Profile */}
+      {/*bell + profile*/}
       <div className="flex items-center gap-5">
         <BellIcon className="w-6 h-6 text-gray-500 cursor-pointer hover:text-gray-800 transition-colors" />
         {currentUser ? (
@@ -456,13 +472,13 @@ const Dashboard: FC<DashboardProps> = ({ currentUser, onLogout }) => {
       </div>
     </header>
 
-    {/* ── Page body ── */}
+    {/*page body*/}
     <div className="flex gap-6 px-8 py-6">
 
-      {/* ── Main content ── */}
+      {/*main content*/}
       <main className="flex-1 min-w-0 flex flex-col gap-7">
 
-        {/* Search + Filter bar */}
+        {/*search + filter bar*/}
         <div className="flex items-center gap-3">
           <div className="relative flex-1">
             <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
@@ -478,7 +494,7 @@ const Dashboard: FC<DashboardProps> = ({ currentUser, onLogout }) => {
           </button>
         </div>
 
-        {/* Starting Soon */}
+        {/*starting soon*/}
         {startingSoon.length ? (
           <TournamentCarousel
             title="Starting Soon"
@@ -499,7 +515,7 @@ const Dashboard: FC<DashboardProps> = ({ currentUser, onLogout }) => {
           </section>
         )}
 
-        {/* Future Tournaments */}
+        {/*future tournaments*/}
         {futureTournaments.length ? (
           <TournamentCarousel
             title="Future Tournaments"
@@ -520,10 +536,10 @@ const Dashboard: FC<DashboardProps> = ({ currentUser, onLogout }) => {
         )}
       </main>
 
-      {/* ── Sidebar ── */}
+      {/*sidebar*/}
       <aside className="w-72 shrink-0 flex flex-col gap-4 self-stretch">
 
-        {/* Your Stats */}
+        {/*your stats*/}
         {showPlayerStats ? (
           <div className="bg-[#1a3a1a] text-white rounded-2xl p-5 shadow-md">
             <h2 className="font-bold text-lg text-center mb-1">Your Stats</h2>
@@ -544,7 +560,7 @@ const Dashboard: FC<DashboardProps> = ({ currentUser, onLogout }) => {
           </div>
         ) : null}
 
-        {/* Leaderboard */}
+        {/*leaderboard*/}
         <div className="bg-[#1a3a1a] text-white rounded-2xl p-5 shadow-md flex flex-col">
           <h2 className="font-bold text-lg text-center mb-4">Leaderboard</h2>
           <div className="flex flex-col gap-2">
@@ -584,13 +600,13 @@ const Dashboard: FC<DashboardProps> = ({ currentUser, onLogout }) => {
       </aside>
     </div>
 
-    {/* ── Floating Help button — expands left on hover ── */}
+    {/*floating help button*/}
     <button className="fixed bottom-6 right-6 flex items-center bg-[#4a9a4a] text-white rounded-full shadow-lg hover:bg-[#5aaa5a] transition-all duration-300 cursor-pointer group overflow-hidden h-11">
-      {/* "Help" text slides out from the left */}
+      {/*help text*/}
       <span className="max-w-0 group-hover:max-w-[60px] overflow-hidden whitespace-nowrap transition-all duration-300 text-sm font-semibold pl-0 group-hover:pl-4">
         Help
       </span>
-      {/* ? cap — always visible */}
+      {/*question mark*/}
       <span className="w-11 h-11 flex items-center justify-center text-lg font-bold shrink-0">
         ?
       </span>

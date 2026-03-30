@@ -49,7 +49,7 @@ function App() {
         <Route path="/dashboard/player" element={<PlayerDashboard currentUser={currentUser} onLogout={handleLogout} />} />
         <Route path="/auth/login" element={<AuthPage mode="login" onAuthenticated={handleAuthenticated} />} />
         <Route path="/auth/signup" element={<AuthPage mode="signup" onAuthenticated={handleAuthenticated} />} />
-        {/* Future role-based dashboards go here, e.g.:
+        {/*future role-based dashboards go here, e.g.:
             <Route path="/dashboard/organizer" element={<OrganizerDashboard />} />
         */}
       </Routes>
