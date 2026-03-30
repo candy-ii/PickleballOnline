@@ -1,4 +1,6 @@
 import { useEffect, useState, type FC, type WheelEvent } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import type { AuthUser } from '../types/auth'
 
 // ── Icons ────────────────────────────────────────────────────────────────────
 
@@ -148,6 +150,21 @@ const normalizeTournament = (tournament: TournamentsResponse['startingSoon'][num
   kind: 'tournament',
 })
 
+const getInitials = (value: string) =>
+  value
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('')
+
+const formatStatValue = (value: number, suffix = '') => (value === 0 ? 'N/A' : `${value}${suffix}`)
+const formatCurrencyValue = (value: number) => (value === 0 ? 'N/A' : `$${value.toFixed(2)}`)
+const getAccountStatusText = (accountStatus: string | null) =>
+  accountStatus === 'Inactive'
+    ? 'Account Status: Inactive. Activate by joining a tournament.'
+    : `Account Status: ${accountStatus ?? 'N/A'}`
+
 const createFilterMessageCard = (): Tournament => ({
   id: -1,
   name: "Not finding what you're looking for? Try filtering!",
@@ -167,7 +184,8 @@ const TournamentCarousel: FC<{
   onMoveRight: () => void
   onWheel: (event: WheelEvent<HTMLDivElement>) => void
   showEndMessage?: boolean
-}> = ({ title, tournaments, offset, onMoveLeft, onMoveRight, onWheel, showEndMessage = false }) => {
+  requiresLogin?: boolean
+}> = ({ title, tournaments, offset, onMoveLeft, onMoveRight, onWheel, showEndMessage = false, requiresLogin = false }) => {
   const items = showEndMessage ? [...tournaments, createFilterMessageCard()] : tournaments
   const maxOffset = Math.max(items.length - visibleTournamentCards, 0)
   const visibleCarouselItems = items.slice(offset, offset + visibleTournamentCards)
@@ -199,7 +217,9 @@ const TournamentCarousel: FC<{
       </div>
 
       <div onWheel={onWheel} className="grid grid-cols-3 gap-5">
-        {visibleCarouselItems.map((t) => <TournamentCard key={`${t.kind ?? 'tournament'}-${t.id}`} t={t} />)}
+        {visibleCarouselItems.map((t) => (
+          <TournamentCard key={`${t.kind ?? 'tournament'}-${t.id}`} t={t} requiresLogin={requiresLogin} />
+        ))}
       </div>
     </section>
   )
@@ -207,7 +227,16 @@ const TournamentCarousel: FC<{
 
 // ── Tournament Card ───────────────────────────────────────────────────────────
 
-const TournamentCard: FC<{ t: Tournament }> = ({ t }) => (
+const TournamentCard: FC<{ t: Tournament; requiresLogin?: boolean }> = ({ t, requiresLogin = false }) => {
+  const navigate = useNavigate()
+
+  const handleTournamentAction = () => {
+    if (requiresLogin) {
+      navigate('/auth/login')
+    }
+  }
+
+  return (
   <div className="bg-white rounded-2xl shadow-md flex flex-col transition-all duration-200 hover:scale-[1.03] hover:shadow-xl cursor-pointer">
     {t.kind === 'message' ? (
       <div className="flex flex-1 items-center justify-center p-6 text-center text-lg font-semibold text-[#1a3a1a]">
@@ -241,11 +270,19 @@ const TournamentCard: FC<{ t: Tournament }> = ({ t }) => (
 
           <div className="mt-auto pt-2">
             {t.canJoin ? (
-              <button className="w-full bg-[#1a3a1a] text-white rounded-full py-2 text-sm font-bold hover:bg-[#2d5a27] transition-colors cursor-pointer">
+              <button
+                type="button"
+                onClick={handleTournamentAction}
+                className="w-full bg-[#1a3a1a] text-white rounded-full py-2 text-sm font-bold hover:bg-[#2d5a27] transition-colors cursor-pointer"
+              >
                 JOIN NOW
               </button>
             ) : (
-              <button className="w-full bg-[#7a8a6a] text-white rounded-full py-2 text-sm font-bold hover:bg-[#8a9a7a] transition-colors cursor-pointer">
+              <button
+                type="button"
+                onClick={handleTournamentAction}
+                className="w-full bg-[#7a8a6a] text-white rounded-full py-2 text-sm font-bold hover:bg-[#8a9a7a] transition-colors cursor-pointer"
+              >
                 JOIN WAITLIST
               </button>
             )}
@@ -255,10 +292,17 @@ const TournamentCard: FC<{ t: Tournament }> = ({ t }) => (
     )}
   </div>
 )
+}
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
-const Dashboard: FC = () => {
+interface DashboardProps {
+  currentUser: AuthUser | null
+  onLogout: () => void
+}
+
+const Dashboard: FC<DashboardProps> = ({ currentUser, onLogout }) => {
+  const navigate = useNavigate()
   const [leaderboard, setLeaderboard] = useState<LeaderboardPlayer[]>([])
   const [leaderboardError, setLeaderboardError] = useState<string | null>(null)
   const [startingSoon, setStartingSoon] = useState<Tournament[]>([])
@@ -330,6 +374,39 @@ const Dashboard: FC = () => {
       move(delta > 0 ? 1 : -1)
     }
 
+  const handleLogoutClick = () => {
+    onLogout()
+    navigate('/')
+  }
+
+  const statsCards = currentUser?.role === 'Player'
+    ? [
+        {
+          value: formatStatValue(currentUser.stats.participations),
+          label: 'Matches Played',
+        },
+        {
+          value: formatStatValue(currentUser.stats.championshipsWon),
+          label: 'Tournament Wins',
+        },
+        {
+          value: formatStatValue(currentUser.stats.totalScore, 'pt'),
+          label: 'Current Points',
+        },
+        {
+          value: formatCurrencyValue(currentUser.stats.feesPaid),
+          label: 'Fees Paid',
+        },
+      ]
+    : [
+        { value: 'N/A', label: 'Matches Played' },
+        { value: 'N/A', label: 'Tournament Wins' },
+        { value: 'N/A', label: 'Current Points' },
+        { value: 'N/A', label: 'Fees Paid' },
+      ]
+
+  const showPlayerStats = currentUser?.role === 'Player'
+
   return (
   <div className="min-h-screen bg-[#b8cfb8]" style={{ fontFamily: 'system-ui, sans-serif' }}>
 
@@ -348,14 +425,34 @@ const Dashboard: FC = () => {
       {/* Bell + Profile */}
       <div className="flex items-center gap-5">
         <BellIcon className="w-6 h-6 text-gray-500 cursor-pointer hover:text-gray-800 transition-colors" />
-        <div className="flex items-center gap-2">
-          <img
-            src="https://placehold.co/40x40/8aaa80/ffffff?text=JP"
-            alt="Johnny Pickleball avatar"
-            className="w-10 h-10 rounded-full object-cover"
-          />
-          <span className="text-sm font-semibold text-gray-800">Johnny Pickleball</span>
-        </div>
+        {currentUser ? (
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#8aaa80] text-sm font-bold text-white">
+                {getInitials(currentUser.name ?? currentUser.email)}
+              </div>
+              <div className="flex flex-col">
+                <span className="text-sm font-semibold text-gray-800">
+                  {currentUser.name ?? currentUser.email}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleLogoutClick}
+                  className="text-left text-xs font-semibold tracking-wide text-[#1a3a1a] transition hover:text-[#2d5a27]"
+                >
+                  LOG OUT
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <Link
+            to="/auth/login"
+            className="rounded-full bg-[#1a3a1a] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#2d5a27]"
+          >
+            LOGIN / SIGN UP
+          </Link>
+        )}
       </div>
     </header>
 
@@ -391,6 +488,7 @@ const Dashboard: FC = () => {
             onMoveRight={() => moveStartingSoon(1)}
             onWheel={handleCarouselWheel(moveStartingSoon)}
             showEndMessage
+            requiresLogin={!currentUser}
           />
         ) : (
           <section>
@@ -410,6 +508,7 @@ const Dashboard: FC = () => {
             onMoveLeft={() => moveFuture(-1)}
             onMoveRight={() => moveFuture(1)}
             onWheel={handleCarouselWheel(moveFuture)}
+            requiresLogin={!currentUser}
           />
         ) : (
           <section>
@@ -425,30 +524,32 @@ const Dashboard: FC = () => {
       <aside className="w-72 shrink-0 flex flex-col gap-4 self-stretch">
 
         {/* Your Stats */}
-        <div className="bg-[#1a3a1a] text-white rounded-2xl p-5 shadow-md">
-          <h2 className="font-bold text-lg text-center mb-1">Your Stats</h2>
-          <p className="text-green-300 text-sm text-center mb-4">Skill Level: Intermediate</p>
-          <div className="grid grid-cols-2 gap-3">
-            {[
-              { value: '30',   label: 'Matches Played'   },
-              { value: '2',    label: 'Tournament Wins'  },
-              { value: '15pt', label: 'Current Points'   },
-              { value: '65%',  label: 'Win/Loss Ratio'   },
-            ].map(({ value, label }) => (
-              <div key={label} className="bg-[#2d5a27] rounded-xl p-3 text-center">
-                <div className="text-2xl font-bold">{value}</div>
-                <div className="text-xs text-green-300 mt-1 leading-tight">{label}</div>
-              </div>
-            ))}
+        {showPlayerStats ? (
+          <div className="bg-[#1a3a1a] text-white rounded-2xl p-5 shadow-md">
+            <h2 className="font-bold text-lg text-center mb-1">Your Stats</h2>
+            <p className="text-green-300 text-sm text-center mb-2">
+              Skill Level: {currentUser.stats.skillLevel}
+            </p>
+            <p className="text-white/70 text-xs text-center mb-3">
+              {getAccountStatusText(currentUser.accountStatus)}
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              {statsCards.map(({ value, label }) => (
+                <div key={label} className="bg-[#2d5a27] rounded-xl p-3 text-center">
+                  <div className="text-2xl font-bold">{value}</div>
+                  <div className="text-xs text-green-300 mt-1 leading-tight">{label}</div>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        ) : null}
 
         {/* Leaderboard */}
-        <div className="bg-[#1a3a1a] text-white rounded-2xl p-5 shadow-md flex-1 flex flex-col">
+        <div className="bg-[#1a3a1a] text-white rounded-2xl p-5 shadow-md flex flex-col">
           <h2 className="font-bold text-lg text-center mb-4">Leaderboard</h2>
-          <div className="flex flex-col gap-2 flex-1 justify-between">
+          <div className="flex flex-col gap-2">
             {leaderboard.map(({ playerId, position, name, totalScore, winRate }, i) => (
-              <div key={playerId} className="flex items-center gap-3 bg-[#2d5a27] rounded-xl px-4 py-3 flex-1">
+              <div key={playerId} className="flex items-center gap-3 bg-[#2d5a27] rounded-xl px-4 py-3">
                 <img
                   src={`https://placehold.co/48x48/${getAvatarBg(playerId)}/ffffff?text=${name.split(' ').map(w => w[0]).join('')}`}
                   alt={name}
@@ -473,7 +574,7 @@ const Dashboard: FC = () => {
               </div>
             ))}
             {!leaderboard.length && (
-              <div className="flex flex-1 items-center justify-center rounded-xl bg-[#2d5a27] px-4 py-6 text-sm text-white/70">
+              <div className="flex items-center justify-center rounded-xl bg-[#2d5a27] px-4 py-6 text-sm text-white/70">
                 {leaderboardError ?? 'Loading leaderboard...'}
               </div>
             )}
